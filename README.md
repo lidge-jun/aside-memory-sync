@@ -125,8 +125,40 @@ cat AGENT.md; git diff --diff-filter=U
 
 ## 요구사항
 
-- Git 2.x, Python 3.8+, Bash
+- Git 2.x, Python 3.8+, Bash 3.2+ (macOS 기본 bash 그대로 동작)
 - macOS / Linux
+
+## 실전 기록
+
+맥북 2대 + 맥미니를 한 계정으로 묶어 본 결과와, 그 과정에서 알게 된 것들.
+
+**슬롯 번호는 기기마다 다르다.** 같은 계정이 한쪽엔 `u/1`, 다른 쪽엔 `u/0` 이었다.
+번호로 짐짓하지 말고 `userId` 로 확인해라:
+
+```bash
+jq -r '.accounts[] | "slot=\(.id)  \(.email)  \(.userId)"' ~/.aside/accounts.json
+```
+
+**용량은 겁낼 것 없다.** 한 기기의 메모리 폴더가 558MB 였지만, 그중 525MB 는
+`.history.jsonl`, 27MB 는 `.moss-cache` 였다. 둘 다 gitignore 대상이라 실제 동기화된
+마크다운은 2.6MB, `.git` 은 1.5MB 에 그쳤다.
+
+**자동 병합이 거의 다 처리했다.** 세 기기를 합치는 데 남은 충돌은 `TAXONOMY.md` 하나뿐이었다.
+같은 날짜의 일별 로그 3개와 `USER.md` / `MEMORY.md` 는 전부 자동으로 합쳐졌다.
+
+**한쪽을 버리기 전에 상위집합인지 확인해라.** 고유 내용이 없는지 먼저 본 다음 결정하는 게 안전하다:
+
+```bash
+git show :2:FILE > /tmp/ours; git show :3:FILE > /tmp/theirs
+comm -23 <(sort -u /tmp/ours) <(sort -u /tmp/theirs)   # 비어있으면 theirs 가 상위집합
+```
+
+**되돌릴 수 있게 해두어라.** 첫 동기화 전 세 기기에 태그를 박아두면 마음이 편하다:
+
+```bash
+git tag pre-sync-$(date +%Y%m%d-%H%M%S)
+# 문제 생기면: git reset --hard pre-sync-<타임스탬프>
+```
 
 ## 라이선스
 
