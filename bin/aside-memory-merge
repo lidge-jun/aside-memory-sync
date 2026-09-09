@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""
+aside-memory-merge - Aside 메모리 마크다운용 구조 인식 3-way 병합 드라이버.
+
+git이 다음 형태로 호출한다 (install.sh 가 등록):
+    aside-memory-merge %O %A %B %P
+
+동작 원칙
+  1) 먼저 일반 `git merge-file` 을 시도한다. 깨끗하게 병합되면 그대로 사용한다.
+  2) 충돌한 경우에만 파일 종류별 휴리스틱을 적용한다.
+       episodic/*.md      -> append-only 로그. 양쪽 블록 합집합 + 시간순 정렬.
+       MEMORY.md/USER.md  -> L1 요약. 같은 제목끼리 줄 단위 합집합.
+       semantic 페이지     -> History 는 합집합, Current 는 판단 필요 시 충돌 유지.
+       그 외                -> 충돌 마커 유지.
+
+종료 코드
+    0 = 깨끗하게 병합됨 (결과를 %A 에 기록)
+    1 = 충돌 마커가 %A 에 남음. 사람 또는 에이전트가 판단해야 함.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HEADING_RE = re.compile(r"^#{2,6}\s+\S")
+TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+
+L1_FILES = {"MEMORY.md", "USER.md"}
+SEMANTIC_DIRS = (
+    "users/",
+    "agent/",
+    "people/",
+    "companies/",
+    "sites/",
+    "projects/",
+    "concepts/",
+    "routines/",
+)
+
+OURS_LABEL = "ours (this machine)"
+THEIRS_LABEL = "theirs (other machine)"
+
+
+# --------------------------------------------------------------------------
+# 파일 입출력
+# --------------------------------------------------------------------------
+def read(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+def write(path: str, text: str) -> None:
+    if not text.endswith("\n"):
+        text += "\n"
+    Path(path).write_text(text, encoding="utf-8")
+
+
+def git_merge_file(base: str, ours: str, theirs: str) -> tuple[int, str]:
+    """표준 3-way 병합. returncode 0 이면 충돌 없음."""
+    proc = subprocess.run(
+        [
+            "git", "merge-file", "-p",
+            "-L", OURS_LABEL, "-L", "base", "-L", THEIRS_LABEL,
+            ours, base, theirs,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode, proc.stdout
+
+
+# --------------------------------------------------------------------------
+# 마크다운 블록 분해
+# --------------------------------------------------------------------------
+def split_blocks(text: str) -> tuple[str, list[str]]:
+    """(머리말, 제목 단위 블록 목록) 으로 나눈다. 머리말에는 frontmatter 와 H1 이 들어간다."""
+    preamble: list[str] = []
+    blocks: list[str] = []
+    current: list[str] | None = None
+
+    for line in text.splitlines():
+        if HEADING_RE.match(line):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is None:
+            preamble.append(line)
+        else:
+            current.append(line)
+
+    if current is not None:
+        blocks.append(current)
+
+    return "\n".join(preamble).rstrip(), ["\n".join(b).rstrip() for b in blocks]
+
+
+def norm(text: str) -> str:
+    """공백/대소문자를 무시한 비교용 정규화 키."""
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def heading_of(block: str) -> str:
+    return block.splitlines()[0].strip()
+
+
+def assemble(preamble: str, blocks: list[str]) -> str:
+    parts = []
+    if preamble.strip():
+        parts.append(preamble.rstrip())
+    parts.extend(b.rstrip() for b in blocks if b.strip())
+    return "\n\n".join(parts).strip()
+
+
+def conflict_block(ours_block: str, theirs_block: str) -> str:
+    return (
+        f"<<<<<<< {OURS_LABEL}\n"
+        f"{ours_block.rstrip()}\n"
+        f"=======\n"
+        f"{theirs_block.rstrip()}\n"
+        f">>>>>>> {THEIRS_LABEL}"
+    )
+
+
+# --------------------------------------------------------------------------
+# 병합 원시 연산
+# --------------------------------------------------------------------------
+def union_blocks(ours: list[str], theirs: list[str]) -> list[str]:
+    """ours 순서를 유지하면서 theirs 의 새 블록만 뒤에 붙인다."""
+    seen = {norm(b) for b in ours}
+    out = list(ours)
+    for block in theirs:
+        key = norm(block)
+        if key not in seen:
+            seen.add(key)
+            out.append(block)
+    return out
+
+
+def union_lines(ours_block: str, theirs_block: str) -> str:
+    """같은 제목을 가진 두 블록의 본문 줄을 합집합으로 합친다."""
+    ours_lines = ours_block.splitlines()
+    seen = {norm(line) for line in ours_lines if line.strip()}
+    extra = [
+        line
+        for line in theirs_block.splitlines()[1:]
+        if line.strip() and norm(line) not in seen
+    ]
+    if not extra:
+        return ours_block
+    return "\n".join(ours_lines + extra)
+
+
+def time_sort_key(block: str, index: int) -> tuple[int, int, int]:
+    """제목 줄의 HH:MM 을 기준으로 정렬. 시간이 없으면 원래 순서를 유지하며 뒤로."""
+    match = TIME_RE.search(heading_of(block))
+    if match:
+        return (0, int(match.group(1)) * 60 + int(match.group(2)), index)
+    return (1, 0, index)
+
+
+def merge_by_heading(
+    base_blocks: list[str],
+    ours_blocks: list[str],
+    theirs_blocks: list[str],
+    strict_headings: tuple[str, ...] = (),
+) -> tuple[list[str], bool]:
+    """
+    같은 제목의 블록끼리 짝지어 병합한다.
+
+    strict_headings 에 해당하는 제목(예: '## Current')은 양쪽이 서로 다르게
+    바뀌었을 때 자동 병합하지 않고 충돌로 남긴다. 판단이 필요한 영역이기 때문이다.
+    """
+    base_map = {heading_of(b): b for b in base_blocks}
+    theirs_map: dict[str, str] = {}
+    for block in theirs_blocks:
+        theirs_map.setdefault(heading_of(block), block)
+
+    conflicted = False
+    result: list[str] = []
+    consumed: set[str] = set()
+
+    for ours_block in ours_blocks:
+        head = heading_of(ours_block)
+        theirs_block = theirs_map.get(head)
+
+        if theirs_block is None or head in consumed:
+            result.append(ours_block)
+            continue
+
+        consumed.add(head)
+        base_block = base_map.get(head)
+
+        # 양쪽이 같으면 그대로.
+        if norm(ours_block) == norm(theirs_block):
+            result.append(ours_block)
+            continue
+
+        # 한쪽만 바뀌었으면 바뀐 쪽을 택한다.
+        if base_block is not None and norm(ours_block) == norm(base_block):
+            result.append(theirs_block)
+            continue
+        if base_block is not None and norm(theirs_block) == norm(base_block):
+            result.append(ours_block)
+            continue
+
+        # 양쪽 다 바뀐 경우.
+        if any(head.lower().startswith(s.lower()) for s in strict_headings):
+            result.append(conflict_block(ours_block, theirs_block))
+            conflicted = True
+        else:
+            result.append(union_lines(ours_block, theirs_block))
+
+    for theirs_block in theirs_blocks:
+        if heading_of(theirs_block) not in consumed and not any(
+            heading_of(theirs_block) == heading_of(r) for r in result
+        ):
+            result.append(theirs_block)
+
+    return result, conflicted
+
+
+# --------------------------------------------------------------------------
+# 파일 종류별 전략
+# --------------------------------------------------------------------------
+def classify(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    # memory/ 접두사가 붙어 있어도, 메모리 폴더가 저장소 루트여도 모두 대응.
+    tail = normalized.split("memory/", 1)[-1]
+    name = tail.rsplit("/", 1)[-1]
+
+    if "episodic/" in normalized:
+        return "episodic"
+    if name in L1_FILES:
+        return "l1"
+    if any(tail.startswith(d) or f"/{d}" in normalized for d in SEMANTIC_DIRS):
+        return "semantic"
+    return "other"
+
+
+def merge_episodic(base: str, ours: str, theirs: str) -> tuple[str, bool]:
+    """일별 로그는 append-only 이므로 합집합 후 시간순 정렬."""
+    pre_o, blocks_o = split_blocks(read(ours))
+    pre_t, blocks_t = split_blocks(read(theirs))
+
+    preamble = pre_o if pre_o.strip() else pre_t
+    merged = union_blocks(blocks_o, blocks_t)
+    merged = [
+        block
+        for _, block in sorted(
+            ((time_sort_key(b, i), b) for i, b in enumerate(merged)),
+            key=lambda pair: pair[0],
+        )
+    ]
+    return assemble(preamble, merged), False
+
+
+def merge_l1(base: str, ours: str, theirs: str) -> tuple[str, bool]:
+    """MEMORY.md / USER.md 는 제목별 줄 합집합. 중복 제거로 충분히 안전하다."""
+    pre_b, blocks_b = split_blocks(read(base)) if Path(base).stat().st_size else ("", [])
+    pre_o, blocks_o = split_blocks(read(ours))
+    pre_t, blocks_t = split_blocks(read(theirs))
+
+    preamble = pre_o if pre_o.strip() else pre_t
+    merged, conflicted = merge_by_heading(blocks_b, blocks_o, blocks_t)
+    return assemble(preamble, merged), conflicted
+
+
+def merge_semantic(base: str, ours: str, theirs: str) -> tuple[str, bool]:
+    """
+    시맨틱 페이지: frontmatter + Current + History.
+
+    History 는 append-only 이므로 합집합.
+    Current 는 '안정적인 이해' 를 담는 곳이라 양쪽이 다르게 바뀌면 충돌로 남긴다.
+    """
+    pre_b, blocks_b = split_blocks(read(base)) if Path(base).stat().st_size else ("", [])
+    pre_o, blocks_o = split_blocks(read(ours))
+    pre_t, blocks_t = split_blocks(read(theirs))
+
+    preamble = pre_o if pre_o.strip() else pre_t
+    merged, conflicted = merge_by_heading(
+        blocks_b, blocks_o, blocks_t, strict_headings=("## Current",)
+    )
+    return assemble(preamble, merged), conflicted
+
+
+# --------------------------------------------------------------------------
+# 진입점
+# --------------------------------------------------------------------------
+def main(argv: list[str]) -> int:
+    if len(argv) < 4:
+        print("usage: aside-memory-merge %O %A %B %P", file=sys.stderr)
+        return 2
+
+    base, ours, theirs = argv[1], argv[2], argv[3]
+    path = argv[4] if len(argv) > 4 else ours
+
+    # 1단계: 표준 병합이 통하면 굳이 손대지 않는다.
+    code, output = git_merge_file(base, ours, theirs)
+    if code == 0:
+        write(ours, output)
+        return 0
+    if code < 0:
+        return 1
+
+    # 2단계: 종류별 휴리스틱.
+    kind = classify(path)
+    handler = {
+        "episodic": merge_episodic,
+        "l1": merge_l1,
+        "semantic": merge_semantic,
+    }.get(kind)
+
+    if handler is None:
+        write(ours, output)
+        print(f"[aside-merge] {path}: 자동 병합 불가, 충돌 마커 유지", file=sys.stderr)
+        return 1
+
+    try:
+        merged, conflicted = handler(base, ours, theirs)
+    except Exception as exc:  # 드라이버가 git 을 망가뜨리지 않도록 안전망
+        write(ours, output)
+        print(f"[aside-merge] {path}: 휴리스틱 실패({exc}), 충돌 마커 유지", file=sys.stderr)
+        return 1
+
+    write(ours, merged)
+
+    if conflicted:
+        print(f"[aside-merge] {path}: Current 판단 필요", file=sys.stderr)
+        return 1
+
+    print(f"[aside-merge] {path}: {kind} 규칙으로 자동 병합", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

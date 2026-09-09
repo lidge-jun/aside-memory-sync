@@ -1,0 +1,10 @@
+# 모든 마크다운은 구조 인식 병합 드라이버를 거친다.
+# 드라이버는 먼저 표준 3-way 병합을 시도하고, 충돌한 경우에만
+# 파일 종류(episodic / L1 / semantic)에 맞는 규칙을 적용한다.
+
+* text=auto eol=lf
+*.md merge=aside
+
+# 혹시 남아 있을 수 있는 로컬 캐시가 추적되더라도 병합을 시도하지 않도록.
+*.json binary
+memory-index*.json -merge -diff

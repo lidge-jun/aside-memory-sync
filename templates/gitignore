@@ -1,0 +1,25 @@
+# Aside 메모리 저장소용 .gitignore
+#
+# 아래 항목은 "기기 로컬 상태" 이므로 절대 공유하지 않는다.
+# 마크다운만 동기화하면 Aside 데몬이 각 기기에서 알아서 인덱스를 다시 만든다.
+
+# 로컬 벡터 검색 캐시 (moss). pull 후 자동 재생성됨
+.moss-cache/
+.moss-cache-schema
+
+# 로컬 인덱스 매니페스트. 기기마다 내용이 달라 항상 충돌함
+memory-index*.json
+
+# 기기별 실행 상태
+.dream-state.json
+.history.jsonl
+
+# 컨텍스트 인식(화면 OCR/입력 캡처) 기록은 특히 민감하므로 기본 제외.
+# 필요하면 이 줄을 지우되, 무엇이 올라가는지 먼저 확인할 것.
+episodic/context-awareness-*
+
+# OS / 편집기 부산물
+.DS_Store
+*.swp
+*.tmp
+*~
