@@ -132,6 +132,56 @@ git commit
 
 ---
 
+## 자동 동기화 (여러 저장소 한꺼번에)
+
+메모리 말고도 같이 동기화할 저장소가 있다면 `autosync.sh` 를 쓴다.
+손으로 돌려도 되고, 스케줄러에 올려두어도 된다.
+
+```bash
+cp repos.conf.example repos.conf   # 경로를 자기 기기에 맞게 수정
+./autosync.sh --status             # 현재 상태
+./autosync.sh --dry-run            # 무엇이 오갈지
+./autosync.sh                      # 전부 병렬 동기화
+./autosync.sh wiki                 # 하나만
+```
+
+`repos.conf` 형식은 `이름|경로|remote|충돌전략` 이다:
+
+```
+memory|~/.aside/u/1/memory|hub|driver
+wiki|~/kim_wiki|clisu|manual
+```
+
+### 충돌 전략이 두 개인 이유
+
+저장소마다 글의 성격이 다르다. Aside 메모리는 에이전트가 쌓는 append-only 기록이라
+구조를 이용해 자동 병합할 수 있지만, 사람이 쓴 문서는 그러면 내용이 섞인다.
+
+- `driver` — 구조 인식 병합을 거친다. 일별 로그나 History 는 자동으로 합쳤지고,
+  그래도 남는 것만 보류된다.
+- `manual` — 충돌이 나면 **병합을 되돌리고** 사람을 부른다.
+
+둘 다 핵심은 같다: **자동 실행이 저장소를 충돌 상태로 방치하지 않는다.**
+반쯤 병합된 채로 다음 실행이 돌면 피해가 누적된다.
+
+### 주기 실행 등록
+
+```bash
+./install-autosync.sh 15      # 15분마다 (macOS launchd / Linux cron)
+./install-autosync.sh --remove
+tail -f ~/.aside/tools/.autosync/autosync.log
+```
+
+부담이 거의 없다. 변경이 없으면 fetch 한 번으로 끝나고(실측 0.5초),
+`Nice 10` + `LowPriorityIO` 로 돌아 전면 작업을 방해하지 않는다.
+저장소당 잠금이 있어 실행이 겹쳐도 안전하며, 30분 넘은 잔류 잠금은 자동으로 정리된다.
+
+GitHub 같은 보조 remote 에도 함께 보내려면:
+
+```bash
+git config aside.sync.mirror origin
+```
+
 ## 에이전트에게 충돌 해결 맡기기
 
 남는 충돌은 대부분 "두 서술 중 무엇이 참인가" 문제라, 에이전트가 판단하기 좋은 형태다. `AGENT.md`에 그대로 붙여넣을 수 있는 프롬프트가 있다.
