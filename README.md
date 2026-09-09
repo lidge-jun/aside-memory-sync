@@ -73,12 +73,37 @@ git remote add other macmini:/Users/junny/.aside/u/1/memory
 git merge other/main --allow-unrelated-histories
 ```
 
-항상 켜져 있는 기기가 있다면 그쪽에 bare 저장소를 두고 허브로 쓰는 것도 좋다:
+### 중앙 허브 방식 (기기 3대 이상이면 권장)
+
+항상 켜져 있는 서버가 있다면 `hub-setup.sh` 한 번이면 끝난다:
 
 ```bash
-ssh macmini 'git init --bare ~/aside-memory.git'
-git remote add hub macmini:~/aside-memory.git
+cd ~/.aside/u/<슬롯>/memory
+~/.aside/tools/aside-memory-sync/hub-setup.sh <ssh호스트>
 ```
+
+bare 저장소 생성, remote 등록, 첫 병합과 push 까지 알아서 한다. 나머지 기기에서도 같은 명령을 쓰면 된다.
+
+P2P 와의 차이:
+
+| | P2P | 중앙 허브 |
+|---|---|---|
+| 상대 기기 전원 | 켜져 있어야 함 | 무관 |
+| 연결 수 (N대) | N×(N-1)/2 | N |
+| 백업 | 없음 | 허브가 겸함 |
+
+`sync.sh` 는 `hub` 라는 이름의 remote 가 있으면 자동으로 그걸 고른다.
+
+수동으로 하려면:
+
+```bash
+ssh myserver 'git init --bare -b main ~/git/aside-memory.git'
+git remote add hub myserver:~/git/aside-memory.git
+git push -u hub main
+```
+
+> 허브에는 개인 기억이 평문으로 올라간다. 신뢰하는 서버에만 두고,
+> 여러 사람이 쓰는 서버라면 최소한 `chmod 700` 은 해두어라 (`hub-setup.sh` 가 자동으로 한다).
 
 ## 사용
 

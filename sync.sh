@@ -48,7 +48,10 @@ if [[ -z "$REMOTE" ]]; then
   if [[ ${#REMOTES[@]} -eq 1 ]]; then
     REMOTE="${REMOTES[0]}"
   else
-    REMOTE="$(printf '%s\n' "${REMOTES[@]}" | grep -x other || echo "${REMOTES[0]}")"
+    # 중앙 허브(hub)가 있으면 우선, 그다음 P2P 관습명(other), 없으면 첫 번째.
+    REMOTE="$(printf '%s\n' "${REMOTES[@]}" | grep -x hub \
+              || printf '%s\n' "${REMOTES[@]}" | grep -x other \
+              || echo "${REMOTES[0]}")"
   fi
 fi
 git remote get-url "$REMOTE" >/dev/null 2>&1 || die "remote '$REMOTE' 가 없다."
