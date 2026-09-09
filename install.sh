@@ -27,7 +27,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MEMORY_DIR="${1:-}"
 
 if [[ -z "$MEMORY_DIR" ]]; then
-  mapfile -t CANDIDATES < <(find "$HOME/.aside/u" -maxdepth 2 -type d -name memory 2>/dev/null | sort)
+  # macOS 기본 bash 는 3.2 라 mapfile 이 없다. while-read 로 배열을 채운다.
+  CANDIDATES=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && CANDIDATES+=("$line")
+  done < <(find "$HOME/.aside/u" -maxdepth 2 -type d -name memory 2>/dev/null | sort)
 
   if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
     die "메모리 폴더를 찾지 못했다. 경로를 직접 넘겨라: ./install.sh ~/.aside/u/1/memory"

@@ -39,7 +39,11 @@ HOST="$(hostname -s)"
 
 # --- remote 결정 ---------------------------------------------------------
 if [[ -z "$REMOTE" ]]; then
-  mapfile -t REMOTES < <(git remote)
+  # bash 3.2 호환 (mapfile 없음)
+  REMOTES=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && REMOTES+=("$line")
+  done < <(git remote)
   [[ ${#REMOTES[@]} -gt 0 ]] || die "remote 가 없다. 먼저 'git remote add other <호스트>:<경로>' 를 해라."
   if [[ ${#REMOTES[@]} -eq 1 ]]; then
     REMOTE="${REMOTES[0]}"
