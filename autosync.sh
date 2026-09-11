@@ -19,6 +19,11 @@
 #   이름|경로|remote|충돌전략
 #     충돌전략 = driver  : 구조 인식 병합 드라이버에 맡긴다 (Aside 메모리)
 #                manual : 충돌 시 되돌리고 사람을 부른다 (일반 문서 저장소)
+#                pull   : 받기만 한다. 커밋하지 않고, 절대 push 하지 않는다.
+#
+#   driver 와 manual 은 **둘 다 push 한다.** 이름만 보면 manual 이 사람 손을 거칠 것
+#   같지만, 전략이 갈리는 지점은 '충돌이 났을 때 뭘 하나' 하나뿐이다. 로컬에 변경이
+#   있으면 어느 쪽이든 자동 커밋하고 보낸다. 상류를 바꾸면 안 되는 기기에는 pull 을 써라.
 
 set -uo pipefail
 
@@ -94,7 +99,8 @@ sync_one() {
     fi
 
     # --- 1. 로컬 변경 커밋 ----------------------------------------------
-    if [[ -n "$(git status --porcelain)" ]]; then
+    # pull 전략은 커밋하지 않는다. 받기만 하는 기기다.
+    if [[ "$strategy" != "pull" && -n "$(git status --porcelain)" ]]; then
       local n
       n=$(git status --porcelain | wc -l | tr -d ' ')
       git add -A
@@ -110,6 +116,10 @@ sync_one() {
     fi
 
     if ! git rev-parse --verify -q "$remote/$branch" >/dev/null; then
+      if [[ "$strategy" == "pull" ]]; then
+        echo "SKIP|$name|remote 에 $branch 가 없다 (pull 전략은 만들지 않는다)"
+        return 0
+      fi
       git push -q -u "$remote" "$branch" 2>/dev/null && echo "OK|$name|첫 push" || echo "FAIL|$name|첫 push 실패"
       return 0
     fi
@@ -119,6 +129,15 @@ sync_one() {
     behind=$(git rev-list --count "HEAD..$remote/$branch" 2>/dev/null || echo 0)
 
     if [[ "$behind" -gt 0 ]]; then
+      # pull 전략은 fast-forward 만 받는다. 로컬에 뭐가 쌓여 있으면 사람을 부른다.
+      if [[ "$strategy" == "pull" ]]; then
+        if git merge --ff-only "$remote/$branch" >/dev/null 2>&1; then
+          changed=1
+        else
+          echo "HOLD|$name|로컬 변경이 있어 받지 못했다 (pull 전략, 사람이 처리한다)"
+          return 2
+        fi
+      else
       local margs=(--no-edit)
       git merge-base HEAD "$remote/$branch" >/dev/null 2>&1 || margs+=(--allow-unrelated-histories)
 
@@ -141,11 +160,17 @@ sync_one() {
           return 2
         fi
       fi
+      fi
     fi
 
     # --- 4. push -------------------------------------------------------
+    # pull 전략은 절대 보내지 않는다. 이 기기가 상류를 바꿀 수 없어야 하는 경우에 쓴다.
     local ahead
     ahead=$(git rev-list --count "$remote/$branch..HEAD" 2>/dev/null || echo 0)
+    if [[ "$strategy" == "pull" && "$ahead" -gt 0 ]]; then
+      echo "HOLD|$name|보낼 것이 $ahead 개 있지만 pull 전략이라 보내지 않는다"
+      return 2
+    fi
     if [[ "$ahead" -gt 0 ]]; then
       if git push -q "$remote" "$branch" 2>/dev/null; then
         changed=1
@@ -158,7 +183,7 @@ sync_one() {
     # 추가 remote(예: GitHub 미러)가 설정돼 있으면 함께 보낸다. 실패해도 무시.
     local mirror
     mirror=$(git config --get "aside.sync.mirror" 2>/dev/null || true)
-    if [[ -n "$mirror" ]] && git remote get-url "$mirror" >/dev/null 2>&1; then
+    if [[ "$strategy" != "pull" && -n "$mirror" ]] && git remote get-url "$mirror" >/dev/null 2>&1; then
       git push -q "$mirror" "$branch" 2>/dev/null || true
     fi
 
@@ -236,6 +261,7 @@ for f in "$TMPD"/*.out; do
       CLEAN)    say "${DIM}    $name: 변경 없음${RST}" ;;
       DRY)      say "    $name: $msg" ;;
       SKIP)     say "${DIM}    $name: $msg${RST}" ;;
+      HOLD)     warn "$name: $msg"; EXIT=2; CHANGED_ANY=1 ;;
       CONFLICT) warn "$name: $msg"; EXIT=2; CHANGED_ANY=1 ;;
       FAIL)     err "$name: $msg"; EXIT=1; CHANGED_ANY=1 ;;
       *)        [[ -n "$line" ]] && say "    $line" ;;
