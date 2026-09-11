@@ -55,6 +55,27 @@ python3 tests/merge-driver-probe.py
 머리말 합집합, 스텁 합류, LF 고정 세 가지를 확인한다. 인자로 드라이버 경로를 주면 그 파일을
 대신 검사하므로, 옛 버전을 꺼내 이 테스트가 판별력이 있는지도 확인할 수 있다.
 
+### 옛 버전(e7b39a2 이전)에서 올라올 때
+
+그 시절엔 `repos.conf` 가 **추적 파일**이었다. 기기마다 자기 슬롯 경로로 고쳐 쓰기 때문에
+`git pull` 이 이렇게 막힌다.
+
+```
+error: Your local changes to the following files would be overwritten by merge: repos.conf
+```
+
+`reset --hard` 로 밀면 그 기기의 슬롯 설정이 사라진다. 이렇게 한다.
+
+```bash
+cd ~/.aside/tools/aside-memory-sync
+cp repos.conf ~/.aside/tools/repos.conf.bak
+git checkout -- repos.conf
+git merge --ff-only origin/main
+cp ~/.aside/tools/repos.conf.bak repos.conf
+```
+
+지금은 `.gitignore` 가 `repos.conf` 를 잡으므로 한 번만 넘기면 끝이다.
+
 ---
 
 ## 설치
