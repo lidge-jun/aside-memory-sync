@@ -257,6 +257,10 @@ Copy-Item -LiteralPath repos.conf.example -Destination repos.conf
 ```
 memory|~/.aside/u/0/memory|hub|driver
 wiki|~/kim_wiki|clisu|manual
+
+# 그 기기가 상류를 바꾸면 안 되면 manual 이 아니라 pull 을 쓴다.
+# manual 도 자동 커밋 후 push 한다 - 위의 전략 표를 보라.
+#   wiki|~/kim_wiki|clisu|pull
 ```
 
 ### 충돌 전략이 두 개인 이유
