@@ -156,6 +156,30 @@ def union_lines(ours_block: str, theirs_block: str) -> str:
     return "\n".join(ours_lines + extra)
 
 
+def union_preamble(ours: str, theirs: str) -> str:
+    """머리말(H1 앞뒤, 제목 없는 도입부)도 합집합으로 합친다.
+
+    예전에는 `ours` 쪽 머리말만 쓰고 `theirs` 를 통째로 버렸다. 머리말은 보통
+    H1 과 주석뿐이라 대개 같지만, 한쪽 기기가 도입부에 줄을 추가하면 (예: L1
+    재구성 경위를 적은 인용문) 그 줄이 병합 때 조용히 사라졌다. 특히 한쪽이
+    스텁 L1 인 새 기기가 합류할 때 상대 기기의 도입부가 통째로 날아간다.
+    """
+    if not theirs.strip():
+        return ours
+    if not ours.strip():
+        return theirs
+    ours_lines = ours.splitlines()
+    seen = {norm(line) for line in ours_lines if line.strip()}
+    extra = [
+        line
+        for line in theirs.splitlines()
+        if line.strip() and norm(line) not in seen
+    ]
+    if not extra:
+        return ours
+    return "\n".join(ours_lines + extra)
+
+
 def time_sort_key(block: str, index: int) -> tuple[int, int, int]:
     """제목 줄의 HH:MM 을 기준으로 정렬. 시간이 없으면 원래 순서를 유지하며 뒤로."""
     match = TIME_RE.search(heading_of(block))
@@ -248,7 +272,7 @@ def merge_episodic(base: str, ours: str, theirs: str) -> tuple[str, bool]:
     pre_o, blocks_o = split_blocks(read(ours))
     pre_t, blocks_t = split_blocks(read(theirs))
 
-    preamble = pre_o if pre_o.strip() else pre_t
+    preamble = union_preamble(pre_o, pre_t)
     merged = union_blocks(blocks_o, blocks_t)
     merged = [
         block
@@ -266,7 +290,7 @@ def merge_l1(base: str, ours: str, theirs: str) -> tuple[str, bool]:
     pre_o, blocks_o = split_blocks(read(ours))
     pre_t, blocks_t = split_blocks(read(theirs))
 
-    preamble = pre_o if pre_o.strip() else pre_t
+    preamble = union_preamble(pre_o, pre_t)
     merged, conflicted = merge_by_heading(blocks_b, blocks_o, blocks_t)
     return assemble(preamble, merged), conflicted
 
@@ -282,7 +306,7 @@ def merge_semantic(base: str, ours: str, theirs: str) -> tuple[str, bool]:
     pre_o, blocks_o = split_blocks(read(ours))
     pre_t, blocks_t = split_blocks(read(theirs))
 
-    preamble = pre_o if pre_o.strip() else pre_t
+    preamble = union_preamble(pre_o, pre_t)
     merged, conflicted = merge_by_heading(
         blocks_b, blocks_o, blocks_t, strict_headings=("## Current",)
     )
