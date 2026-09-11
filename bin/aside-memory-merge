@@ -54,7 +54,10 @@ def read(path: str) -> str:
 def write(path: str, text: str) -> None:
     if not text.endswith("\n"):
         text += "\n"
-    Path(path).write_text(text, encoding="utf-8", newline="\n")
+    # newline="\n" 을 write_text 에 넘기는 형태는 3.10+ 다. install.sh 는 3.8 까지 받으므로
+    # 3.8 에서도 도는 open() 형태로 쓴다. 이걸 놓치면 3.8/3.9 에서 병합할 때마다 TypeError 가 난다.
+    with Path(path).open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
 
 
 def git_merge_file(base: str, ours: str, theirs: str) -> tuple[int, str]:
