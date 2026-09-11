@@ -1,15 +1,19 @@
-# autosync.sh 가 읽는 저장소 목록
+# autosync.sh / autosync.ps1 가 읽는 저장소 목록
 #
 # 형식: 이름|경로|remote|충돌전략
 #
-#   이름       autosync.sh 에 넘길 짧은 별칭 (예: ./autosync.sh wiki)
-#   경로       로컬 저장소. ~ 사용 가능
+#   이름       autosync 에 넘길 짧은 별칭
+#              예: ./autosync.sh wiki
+#                  .\autosync.ps1 wiki
+#   경로       로컬 저장소. ~ 사용 가능.
+#              정슬래시(/)만 쓴다. 역슬래시는 쓰지 않는다.
 #   remote     동기화할 remote 이름
 #   충돌전략   driver = 구조 인식 병합 드라이버가 처리 (Aside 메모리)
 #              manual = 충돌 시 되돌리고 사람을 부른다 (일반 문서)
 #
-# 슬롯 번호는 기기마다 다르다. 각 기기에서 실제 경로를 확인해 적어라:
+# 슬롯 번호는 기기마다 다르다. 아래 경로는 이 기기의 예시일 뿐이다.
+# 각 기기에서 실제 슬롯을 확인해 적어라:
 #   jq -r '.accounts[] | "slot=\(.id)  \(.email)"' ~/.aside/accounts.json
 
-memory|~/.aside/u/1/memory|hub|driver
+memory|~/.aside/u/0/memory|hub|driver
 wiki|~/kim_wiki|clisu|manual

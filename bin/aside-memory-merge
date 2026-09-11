@@ -54,7 +54,7 @@ def read(path: str) -> str:
 def write(path: str, text: str) -> None:
     if not text.endswith("\n"):
         text += "\n"
-    Path(path).write_text(text, encoding="utf-8")
+    Path(path).write_text(text, encoding="utf-8", newline="\n")
 
 
 def git_merge_file(base: str, ours: str, theirs: str) -> tuple[int, str]:
@@ -66,7 +66,8 @@ def git_merge_file(base: str, ours: str, theirs: str) -> tuple[int, str]:
             ours, base, theirs,
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
     )
     return proc.returncode, proc.stdout
 

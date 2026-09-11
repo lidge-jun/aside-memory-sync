@@ -5,8 +5,10 @@
 Aside의 클라우드 동기화는 **브라우저 데이터와 패스워드 볼트만** 다룬다. `~/.aside/u/<N>/memory/` 아래의 에이전트 기억(사용자 프로필, 일별 로그, 프로젝트/사이트 지식)은 **기기 로컬에만 남고 동기화되지 않는다.** 이 저장소는 그 빈틈을 메운다.
 
 - 중앙 서버가 필요 없다. 기기끼리 SSH로 직접 주고받는다.
-- 자동 실행하지 않는다. 원할 때만 `./sync.sh`.
+- 자동 실행하지 않는다. 원할 때만 `sync.sh` / `sync.ps1` 을 이 저장소 경로로 호출한다.
 - 대부분의 충돌은 자동으로 해결되고, **사람의 판단이 필요한 것만** 남긴다.
+
+구현은 `.sh` 하나다. `.ps1` 은 그 구현으로 들어가는 1급 진입점이다.
 
 ---
 
@@ -40,13 +42,21 @@ Aside 메모리는 전부 마크다운이라 Git의 3-way 병합과 잘 맞는�
 
 ## 설치
 
-각 기기에서 한 번씩:
+각 기기에서 한 번씩. 아래 두 줄은 같은 `install.sh` 에 도달한다.
 
 ```bash
 git clone https://github.com/<you>/aside-memory-sync.git
 cd aside-memory-sync
 ./install.sh
 ```
+
+```powershell
+git clone https://github.com/<you>/aside-memory-sync.git
+cd aside-memory-sync
+.\install.ps1
+```
+
+이후 `<경로>` 는 이 클론의 위치다.
 
 `install.sh`가 하는 일:
 - 메모리 폴더 탐지 (여러 슬롯이면 목록을 보여주고 고르게 한다)
@@ -67,19 +77,34 @@ cd ~/.aside/u/1/memory
 git remote add other macmini:/Users/junny/.aside/u/1/memory
 ```
 
+```powershell
+# 맥북에서 (맥미니를 remote로)
+cd ~/.aside/u/1/memory
+git remote add other macmini:/Users/junny/.aside/u/1/memory
+```
+
 처음 한 번은 두 저장소의 뿌리가 달라 아래가 필요하다. `sync.sh`가 자동으로 감지해서 붙여준다:
 
 ```bash
 git merge other/main --allow-unrelated-histories
 ```
 
+```powershell
+git merge other/main --allow-unrelated-histories
+```
+
 ### 중앙 허브 방식 (기기 3대 이상이면 권장)
 
-항상 켜져 있는 서버가 있다면 `hub-setup.sh` 한 번이면 끝난다:
+항상 켜져 있는 서버가 있다면 `hub-setup.sh` / `hub-setup.ps1` 한 번이면 끝난다:
 
 ```bash
 cd ~/.aside/u/<슬롯>/memory
-~/.aside/tools/aside-memory-sync/hub-setup.sh <ssh호스트>
+bash <경로>/hub-setup.sh <ssh호스트>
+```
+
+```powershell
+cd ~/.aside/u/<슬롯>/memory
+<경로>\hub-setup.ps1 <ssh호스트>
 ```
 
 bare 저장소 생성, remote 등록, 첫 병합과 push 까지 알아서 한다. 나머지 기기에서도 같은 명령을 쓰면 된다.
@@ -102,17 +127,31 @@ git remote add hub myserver:~/git/aside-memory.git
 git push -u hub main
 ```
 
+```powershell
+ssh myserver 'git init --bare -b main ~/git/aside-memory.git'
+git remote add hub myserver:~/git/aside-memory.git
+git push -u hub main
+```
+
 > 허브에는 개인 기억이 평문으로 올라간다. 신뢰하는 서버에만 두고,
 > 여러 사람이 쓰는 서버라면 최소한 `chmod 700` 은 해두어라 (`hub-setup.sh` 가 자동으로 한다).
 
 ## 사용
 
-```bash
-cd ~/.aside/u/1/memory
+`sync.sh` 는 어느 OS에서도 메모리 저장소에 복사되지 않는다. 메모리 폴더에서, 이 저장소 경로로 호출한다.
 
-./sync.sh --dry-run   # 뭐가 오갈지만 확인
-./sync.sh             # 커밋 -> fetch -> 병합 -> push
-./sync.sh --yes       # 확인 프롬프트 없이 (cron/스크립트용)
+```bash
+cd ~/.aside/u/<슬롯>/memory
+bash <경로>/sync.sh --dry-run   # 뭐가 오갈지만 확인
+bash <경로>/sync.sh             # 커밋 -> fetch -> 병합 -> push
+bash <경로>/sync.sh --yes       # 확인 프롬프트 없이 (스케줄러/스크립트용)
+```
+
+```powershell
+cd ~/.aside/u/<슬롯>/memory
+<경로>\sync.ps1 --dry-run
+<경로>\sync.ps1
+<경로>\sync.ps1 --yes
 ```
 
 충돌이 남으면 이렇게 멈춘다:
@@ -127,14 +166,20 @@ cd ~/.aside/u/1/memory
 ```bash
 git add projects/omo-desktop-macos.md
 git commit
-./sync.sh
+bash <경로>/sync.sh
+```
+
+```powershell
+git add projects/omo-desktop-macos.md
+git commit
+<경로>\sync.ps1
 ```
 
 ---
 
 ## 자동 동기화 (여러 저장소 한꺼번에)
 
-메모리 말고도 같이 동기화할 저장소가 있다면 `autosync.sh` 를 쓴다.
+메모리 말고도 같이 동기화할 저장소가 있다면 `autosync.sh` / `autosync.ps1` 을 쓴다.
 손으로 돌려도 되고, 스케줄러에 올려두어도 된다.
 
 ```bash
@@ -145,10 +190,18 @@ cp repos.conf.example repos.conf   # 경로를 자기 기기에 맞게 수정
 ./autosync.sh wiki                 # 하나만
 ```
 
-`repos.conf` 형식은 `이름|경로|remote|충돌전략` 이다:
+```powershell
+Copy-Item -LiteralPath repos.conf.example -Destination repos.conf
+.\autosync.ps1 --status
+.\autosync.ps1 --dry-run
+.\autosync.ps1
+.\autosync.ps1 wiki
+```
+
+`repos.conf` 형식은 `이름|경로|remote|충돌전략` 이다. 경로는 정슬래시만 쓴다. 슬롯은 기기마다 다르니 이 기기의 실제 경로를 적어라:
 
 ```
-memory|~/.aside/u/1/memory|hub|driver
+memory|~/.aside/u/0/memory|hub|driver
 wiki|~/kim_wiki|clisu|manual
 ```
 
@@ -167,9 +220,15 @@ wiki|~/kim_wiki|clisu|manual
 ### 주기 실행 등록
 
 ```bash
-./install-autosync.sh 15      # 15분마다 (macOS launchd / Linux cron)
+./install-autosync.sh 15      # 15분마다 (macOS launchd / Linux cron / Windows Task Scheduler)
 ./install-autosync.sh --remove
 tail -f ~/.aside/tools/.autosync/autosync.log
+```
+
+```powershell
+.\install-autosync.ps1 15
+.\install-autosync.ps1 --remove
+Get-Content -LiteralPath "$env:USERPROFILE\.aside\tools\.autosync\autosync.log" -Wait
 ```
 
 부담이 거의 없다. 변경이 없으면 fetch 한 번으로 끝나고(실측 0.5초),
@@ -182,6 +241,10 @@ GitHub 같은 보조 remote 에도 함께 보내려면:
 git config aside.sync.mirror origin
 ```
 
+```powershell
+git config aside.sync.mirror origin
+```
+
 ## 에이전트에게 충돌 해결 맡기기
 
 남는 충돌은 대부분 "두 서술 중 무엇이 참인가" 문제라, 에이전트가 판단하기 좋은 형태다. `AGENT.md`에 그대로 붙여넣을 수 있는 프롬프트가 있다.
@@ -189,6 +252,11 @@ git config aside.sync.mirror origin
 ```bash
 # 예: Claude Code / Codex 등에 넘기기
 cat AGENT.md; git diff --diff-filter=U
+```
+
+```powershell
+# 예: Claude Code / Codex 등에 넘기기
+Get-Content -LiteralPath AGENT.md; git diff --diff-filter=U
 ```
 
 ## 주의
@@ -201,7 +269,15 @@ cat AGENT.md; git diff --diff-filter=U
 ## 요구사항
 
 - Git 2.x, Python 3.8+, Bash 3.2+ (macOS 기본 bash 그대로 동작)
-- macOS / Linux
+- macOS / Linux / Windows
+
+## Windows 요구사항
+
+- Git for Windows. bash 는 여기에 들어 있는 Git Bash 를 쓴다.
+- 실제 CPython 3.8+, 또는 Aside 동봉 런타임. Microsoft Store 스텁은 안 된다.
+- 주기 실행은 Task Scheduler.
+- 구현은 `.sh` 하나다. `.ps1` 은 그 구현으로 들어가는 1급 진입점이다.
+- `sync.sh` / `sync.ps1` 은 어느 OS에서도 메모리 저장소에 복사되지 않는다. 항상 이 저장소 경로로 호출한다.
 
 ## 실전 기록
 
@@ -214,6 +290,11 @@ cat AGENT.md; git diff --diff-filter=U
 jq -r '.accounts[] | "slot=\(.id)  \(.email)  \(.userId)"' ~/.aside/accounts.json
 ```
 
+```powershell
+(Get-Content -Raw -LiteralPath "$env:USERPROFILE\.aside\accounts.json" | ConvertFrom-Json).accounts |
+  ForEach-Object { "slot=$($_.id)  $($_.email)  $($_.userId)" }
+```
+
 **용량은 겁낼 것 없다.** 한 기기의 메모리 폴더가 558MB 였지만, 그중 525MB 는
 `.history.jsonl`, 27MB 는 `.moss-cache` 였다. 둘 다 gitignore 대상이라 실제 동기화된
 마크다운은 2.6MB, `.git` 은 1.5MB 에 그쳤다.
@@ -224,14 +305,32 @@ jq -r '.accounts[] | "slot=\(.id)  \(.email)  \(.userId)"' ~/.aside/accounts.jso
 **한쪽을 버리기 전에 상위집합인지 확인해라.** 고유 내용이 없는지 먼저 본 다음 결정하는 게 안전하다:
 
 ```bash
-git show :2:FILE > /tmp/ours; git show :3:FILE > /tmp/theirs
-comm -23 <(sort -u /tmp/ours) <(sort -u /tmp/theirs)   # 비어있으면 theirs 가 상위집합
+ours=$(mktemp)
+theirs=$(mktemp)
+git show :2:FILE > "$ours"
+git show :3:FILE > "$theirs"
+comm -23 <(sort -u "$ours") <(sort -u "$theirs")   # 비어있으면 theirs 가 상위집합
+```
+
+```powershell
+$ours = New-TemporaryFile
+$theirs = New-TemporaryFile
+git show :2:FILE | Set-Content -LiteralPath $ours.FullName -Encoding utf8
+git show :3:FILE | Set-Content -LiteralPath $theirs.FullName -Encoding utf8
+Compare-Object (Get-Content -LiteralPath $ours.FullName | Sort-Object -Unique) (Get-Content -LiteralPath $theirs.FullName | Sort-Object -Unique) |
+  Where-Object { $_.SideIndicator -eq '<=' }
+# 결과가 비어 있으면 theirs 가 상위집합
 ```
 
 **되돌릴 수 있게 해두어라.** 첫 동기화 전 세 기기에 태그를 박아두면 마음이 편하다:
 
 ```bash
 git tag pre-sync-$(date +%Y%m%d-%H%M%S)
+# 문제 생기면: git reset --hard pre-sync-<타임스탬프>
+```
+
+```powershell
+git tag "pre-sync-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 # 문제 생기면: git reset --hard pre-sync-<타임스탬프>
 ```
 

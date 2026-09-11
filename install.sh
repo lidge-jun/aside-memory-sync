@@ -23,6 +23,9 @@ die()  { printf '%s[x]%s %s\n' "$RED" "$RST" "$1" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+# MSYS hostname 에는 -s 가 없다. 도메인을 직접 잘라 짧은 이름을 만든다.
+HOST="$(hostname)"; HOST="${HOST%%.*}"
+
 # --- 1. 메모리 폴더 결정 -------------------------------------------------
 MEMORY_DIR="${1:-}"
 
@@ -95,14 +98,38 @@ install_template "$SCRIPT_DIR/templates/gitattributes" .gitattributes
 # --- 4. 병합 드라이버 등록 ----------------------------------------------
 DRIVER="$SCRIPT_DIR/bin/aside-memory-merge"
 [[ -f "$DRIVER" ]] || die "병합 드라이버가 없다: $DRIVER"
-chmod +x "$DRIVER"
+# PATH 의 python3 는 Microsoft Store 스텁(WindowsApps, 실행 시 exit 49)일 수 있다.
+# 존재 확인이 아니라 실행으로 판정하고, 실패하면 Aside 동봉 런타임으로 넘어간다.
+PY=""
+for cand in \
+  "$(command -v python3 2>/dev/null || true)" \
+  "$(command -v python 2>/dev/null || true)" \
+  "${HOME}/.aside/runtime/bin/python3.cmd" \
+  "${HOME}/.aside/runtime/bin/python3" \
+  "${HOME}/.aside/runtime/python/runtime/python.exe"
+do
+  [[ -n "$cand" ]] || continue
+  case "$cand" in *WindowsApps*) continue ;; esac
+  if "$cand" -c "import sys; sys.exit(sys.version_info < (3,8))" >/dev/null 2>&1; then
+    PY="$cand"
+    break
+  fi
+done
+[[ -n "$PY" ]] || die "python 3.8+ 필요"
 
-command -v python3 >/dev/null 2>&1 || die "python3 가 필요하다."
+# git 은 merge.aside.driver 를 CreateProcess 하지 않고 번들 sh 에 넘긴다.
+# 백슬래시는 이스케이프로 먹히므로 두 경로 모두 cygpath -m 으로 정슬래시화한다.
+# macOS 에는 cygpath 가 없으므로 입력을 그대로 쓴다.
+DRIVER_WIN=$(cygpath -m "$DRIVER" 2>/dev/null || printf '%s' "$DRIVER")
+PY_WIN=$(cygpath -m "$PY" 2>/dev/null || printf '%s' "$PY")
 
 # 저장소 로컬 설정에만 기록한다. 전역 설정은 건드리지 않는다.
 git config merge.aside.name "Aside memory structure-aware merge"
-git config merge.aside.driver "$DRIVER %O %A %B %P"
+git config merge.aside.driver "\"$PY_WIN\" \"$DRIVER_WIN\" %O %A %B %P"
 git config merge.aside.recursive binary
+
+# Windows 전역 core.autocrlf=true 가 CRLF 를 이 저장소에 심지 못하게 끈다.
+git config core.autocrlf false
 info "병합 드라이버를 등록했다 (이 저장소 한정)."
 
 # 중앙 서버 없이 기기끼리 직접 push 할 수 있게 한다.
@@ -113,8 +140,8 @@ info "상대 기기가 이곳으로 바로 push 할 수 있게 설정했다."
 
 # 커밋 identity 가 없으면 저장소 로컬로 채운다.
 if ! git config user.email >/dev/null 2>&1; then
-  git config user.email "aside-memory@$(hostname -s)"
-  git config user.name "$(whoami)@$(hostname -s)"
+  git config user.email "aside-memory@$HOST"
+  git config user.name "$(whoami)@$HOST"
   warn "git identity 가 없어 저장소 로컬 값으로 채웠다."
 fi
 
@@ -126,7 +153,7 @@ git add -A
 if git diff --cached --quiet 2>/dev/null; then
   info "커밋할 변경이 없다."
 else
-  git commit -q -m "aside memory: $(hostname -s) 초기 스냅샷"
+  git commit -q -m "aside memory: $HOST 초기 스냅샷"
   info "첫 커밋을 만들었다."
 fi
 

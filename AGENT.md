@@ -1,6 +1,6 @@
 # 에이전트용: 메모리 병합 충돌 해결 지침
 
-`./sync.sh` 가 충돌을 남기고 멈췄을 때, 아래 내용을 에이전트에게 그대로 넘기면 된다.
+`sync.sh` / `sync.ps1` 이 충돌을 남기고 멈췄을 때, 아래 내용을 에이전트에게 그대로 넘기면 된다.
 
 ---
 
@@ -51,7 +51,7 @@ append-only 성격의 내용(일별 로그, `## History`)은 전부 합쳐놓았
 - 마크다운 구조(제목 계층, frontmatter)가 깨지지 않았는지 확인한다.
 - `git add <해결한 파일>` 후 `git commit` 한다.
 - 커밋 메시지에는 무엇을 어떻게 판단했는지 한 줄로 남긴다.
-- 마지막으로 `./sync.sh` 를 다시 실행한다.
+- 마지막으로 `bash <경로>/sync.sh` / `<경로>\sync.ps1` 을 다시 실행한다.
 
 ---
 
@@ -62,4 +62,11 @@ git diff --diff-filter=U --name-only | while read -r f; do
   echo "=============== $f ==============="
   cat "$f"
 done
+```
+
+```powershell
+git diff --diff-filter=U --name-only | ForEach-Object {
+  Write-Output "=============== $_ ==============="
+  Get-Content -LiteralPath $_
+}
 ```

@@ -27,6 +27,9 @@ CONF="${ASIDE_SYNC_CONF:-$SCRIPT_DIR/repos.conf}"
 STATE_DIR="$HOME/.aside/tools/.autosync"
 mkdir -p "$STATE_DIR"
 
+# MSYS hostname 에는 -s 가 없다. 도메인을 직접 잘라 짧은 이름을 만든다.
+HOST="$(hostname)"; HOST="${HOST%%.*}"
+
 RED=$'\033[31m'; GRN=$'\033[32m'; YLW=$'\033[33m'; DIM=$'\033[2m'; RST=$'\033[0m'
 QUIET=0; DRY_RUN=0; ONLY=""; STATUS_ONLY=0
 
@@ -96,7 +99,7 @@ sync_one() {
       n=$(git status --porcelain | wc -l | tr -d ' ')
       git add -A
       # 훅이 자동 실행을 막지 않도록 우회한다. 게이트는 사람이 커밋할 때 돈다.
-      git commit -q --no-verify -m "autosync: $(hostname -s) $(date '+%Y-%m-%d %H:%M') (파일 ${n}개)" 2>/dev/null
+      git commit -q --no-verify -m "autosync: $HOST $(date '+%Y-%m-%d %H:%M') (파일 ${n}개)" 2>/dev/null
       changed=1
     fi
 

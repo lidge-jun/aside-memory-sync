@@ -1,0 +1,4 @@
+# 이 저장소의 텍스트는 LF 로 정규화한다. Windows 전역 autocrlf 에 의존하지 않는다.
+* text=auto eol=lf
+*.sh text eol=lf
+bin/aside-memory-merge text eol=lf

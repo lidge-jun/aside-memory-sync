@@ -20,6 +20,9 @@ episodic/context-awareness-*
 
 # OS / 편집기 부산물
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
 *.swp
 *.tmp
 *~

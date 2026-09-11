@@ -35,7 +35,8 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "여기는 git 저장소가 아�
 cd "$(git rev-parse --show-toplevel)"
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-HOST="$(hostname -s)"
+# MSYS hostname 에는 -s 가 없다. 도메인을 직접 잘라 짧은 이름을 만든다.
+HOST="$(hostname)"; HOST="${HOST%%.*}"
 
 # --- remote 결정 ---------------------------------------------------------
 if [[ -z "$REMOTE" ]]; then
